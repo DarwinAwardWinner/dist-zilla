@@ -76,7 +76,12 @@ package DZT::Script;
 
 my $with_import_version = '
 package DZT::WIVer;
+# This comment is right before the "use strict 1" line
 use strict 1; # This comment should not move off the "use strict 1" line.
+# This comment is right after the "use strict 1" line
+
+# This is a comment about the following line of code
+my $x = "This is an actual statement, not a comment";
 1;
 ';
 
@@ -197,7 +202,10 @@ unlike(
   "no version for DZT::TP2 when it was hidden with a comment"
 );
 
-diag "-----", $tzil->slurp_file('build/lib/DZT/WIVer.pm');
+my $dzt_wiver = $tzil->slurp_file('build/lib/DZT/WIVer.pm');
+diag "-----", $dzt_wiver;
+like($dzt_wiver, qr{\Quse strict 1; # This comment should not move off the "use strict 1" line.\E},
+     "Comment after \"use strict\" was not moved to a separate line");
 
 {
   local $ENV{TRIAL} = 1;
@@ -222,4 +230,3 @@ diag "-----", $tzil->slurp_file('build/lib/DZT/WIVer.pm');
 }
 
 done_testing;
-
