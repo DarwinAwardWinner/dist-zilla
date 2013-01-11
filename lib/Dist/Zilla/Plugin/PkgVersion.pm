@@ -108,6 +108,39 @@ sub munge_perl {
       $stmt = $next;
     }
 
+    # $stmt is now the statement we want to insert after, but first if
+    # all the subsequent elements on the same line are insignificant
+    # and don't spill over into the next line, we skip them as well.
+    my $stmt_newline_count = scalar(split("\n", $stmt->content)) - 1;
+    my $stmt_end_line = $stmt->line_number + $stmt_newline_count;
+    my @additional_line_elems;
+    my $next = $stmt;
+    while ($next = $next->next_sibling) {
+      last if $next->line_number > $stmt_end_line;
+      last if $next->content =~ m{\s*\n\s*}; # Don't add the trailing newline of the line
+      push @additional_line_elems, $next;
+    }
+
+    my @elems_to_add = (
+      PPI::Token::Whitespace->new("\n"),
+      $children[0]->clone,
+    );
+
+    if (@additional_line_elems) {
+      my $remainder_of_line_significant = 0;
+      for my $elem (@additional_line_elems) {
+        if ($elem->significant || ($elem->content =~ m{\n})) {
+          $remainder_of_line_significant = 1;
+          last;
+        }
+      }
+      if ($remainder_of_line_significant) {
+        push @elems_to_add, PPI::Token::Whitespace->new("\n");
+      } else {
+        $stmt = $additional_line_elems[-1];
+      }
+    }
+
     $self->log_debug([
       'adding $VERSION assignment to %s in %s',
       $package,
@@ -115,8 +148,15 @@ sub munge_perl {
     ]);
 
     Carp::carp("error inserting version in " . $file->name)
-      unless $stmt->insert_after($children[0]->clone)
-      and    $stmt->insert_after( PPI::Token::Whitespace->new("\n") );
+      unless $stmt->insert_after( PPI::Token::Whitespace->new("\n") );
+    # Inserting the version statement fails, presumably because it
+    # wants to be inserted after a significant token. So instead we
+    # insert a newline token and then append to it. What could
+    # possibly go wrong?
+    $stmt->next_sibling->add_content($children[0]->content);
+    # Carp::carp("error inserting version in " . $file->name)
+
+    #   unless $stmt->next_sibling->insert_after($children[0]->clone)
   }
 
   $self->save_ppi_document_to_file($document, $file);
